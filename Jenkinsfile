@@ -1,52 +1,65 @@
 pipeline {
   agent any
   
-   tools {nodejs "node"}
+  tools { nodejs "node" }
     
   stages {
     stage("Clone code from GitHub") {
-            steps {
-                script {
-                    checkout scmGit(branches: [[name: '*/main']], extensions: [], userRemoteConfigs: [[credentialsId: 'GITHUB_CREDENTIALS', url: 'https://github.com/devopshint/Deploy-NodeApp-to-AWS-EKS-using-Jenkins-Pipeline']])
-                }
-            }
+      steps {
+        script {
+          checkout scmGit(branches: [[name: '*/main']], extensions: [], userRemoteConfigs: [[credentialsId: 'GITHUB_CREDENTIALS', url: 'https://github.com/kaleyveeravenkatasatyanukarajkumar/Deploy-NodeApp-to-AWS-EKS-using-Jenkins-Pipeline.git']])
         }
+      }
+    }
      
     stage('Node JS Build') {
       steps {
         sh 'npm install'
       }
     }
-  
-     stage('Build Node JS Docker Image') {
-            steps {
-                script {
-                  sh 'docker build -t devopshint/node-app-1.0 .'
-                }
-            }
-        }
 
-
-        stage('Deploy Docker Image to DockerHub') {
-            steps {
-                script {
-                 withCredentials([string(credentialsId: 'devopshintdocker', variable: 'devopshintdocker')]) {
-                    sh 'docker login -u devopshint -p ${devopshintdocker}'
-            }
-            sh 'docker push devopshint/node-app-1.0'
-        }
-            }   
-        }
-         
-     stage('Deploying Node App to Kubernetes') {
+    stage('ECR Login') {
       steps {
         script {
-          sh ('aws eks update-kubeconfig --name sample --region ap-south-1')
-          sh "kubectl get ns"
-          sh "kubectl apply -f nodejsapp.yaml"
+          sh 'aws ecr get-login-password --region us-east-1 | docker login --username AWS --password-stdin 148761646597.dkr.ecr.us-east-1.amazonaws.com'
         }
       }
     }
 
+    stage('Build Node JS Docker Image') {
+      steps {
+        script {
+          sh 'docker build -t kaleyveeravenkatasatyanukarajkumar/node-app-1.0 .'
+        }
+      }
+    }
+
+    stage('Push Docker Image to ECR') {
+      steps {
+        script {
+          sh 'docker tag kaleyveeravenkatasatyanukarajkumar/node-app-1.0 148761646597.dkr.ecr.us-east-1.amazonaws.com/kaleyveeravenkatasatyanukarajkumar/node-app-1.0'
+          sh 'docker push 148761646597.dkr.ecr.us-east-1.amazonaws.com/kaleyveeravenkatasatyanukarajkumar/node-app-1.0'
+        }
+      }   
+    }
+
+         
+    stage('Deploying Node App to Minikube') {
+      steps {
+        script {
+          // Start Minikube if it's not already running
+          sh 'minikube start'
+          
+          // Set the context to Minikube
+          sh 'kubectl config use-context minikube'
+          
+          // Check the namespaces
+          sh "kubectl get ns"
+          
+          // Apply the Kubernetes configuration
+          sh "kubectl apply -f nodejsapp.yaml"
+        }
+      }
+    }
   }
 }
